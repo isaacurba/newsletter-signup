@@ -1,22 +1,27 @@
 import express from "express";
 import bodyParser from "body-parser";
 import path from "path";
-import https from "https";  
-import { fileURLToPath } from "url";
+import https from "https";
+import { fileURLToPath } from "url"; // ✅ correct import
+import dotenv from "dotenv";
 
+dotenv.config();
 
 const app = express();
+
+// ⛳ Resolving __dirname in ES Module
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Serve static files
-app.use(express.static("public"));  
+// Static files
+app.use(express.static("public"));
 
-// Parse form data
+// Form data
 app.use(bodyParser.urlencoded({ extended: true }));
 
-
-const appKey = "c4d4ef0fef7fd10657df3f83fb152169-us4";
+// Load from .env
+const appKey = process.env.MAILCHIMP_API_KEY;
+const listID = process.env.MAILCHIMP_LIST_ID;
 
 // Routes
 app.get("/", (req, res) => {
@@ -24,40 +29,45 @@ app.get("/", (req, res) => {
 });
 
 app.post("/", (req, res) => {
-  const firstName = req.body.firstName;
-  const lastName = req.body.lastName;
-  const email = req.body.email;
+  const { firstName, lastName, email } = req.body;
 
   const data = {
     members: [
-        {
-            email_address: email,
-            status: "subscribed",
-            merge_fields:{
-                FNAME: firstName,
-                LNAME: lastName,
-            }
+      {
+        email_address: email,
+        status: "subscribed",
+        merge_fields: {
+          FNAME: firstName,
+          LNAME: lastName,
         }
+      }
     ]
   };
+
   const jsonData = JSON.stringify(data);
-  const url = "https://us4.api.mailchimp.com/3.0/lists/5385fafb37";
+  const url = `https://us4.api.mailchimp.com/3.0/lists/${listID}`;
 
   const options = {
     method: "POST",
-    auth: "isaac:c4d4ef0fef7fd10657df3f83fb152169-us4"
+    auth: `anystring:${appKey}` // ✅ use any string before :
   };
 
-  const request = https.request(url, options, (response)=> {
-    response.on("data", (data)=> {
-      console.log(JSON.parse(data));
+  const request = https.request(url, options, (response) => {
+    let responseData = "";
 
-    if (response.statusCode === 200) {
-         res.sendFile(path.join(__dirname, "success.html"));
-    } else {
-         res.sendFile(path.join(__dirname, "failure.html"));
+    response.on("data", (chunk) => {
+      responseData += chunk;
+    });
+
+    response.on("end", () => {
+      const parsedData = JSON.parse(responseData);
+      console.log(parsedData);
+
+      if (response.statusCode === 200 && !parsedData.errors?.length) {
+        res.sendFile(path.join(__dirname, "success.html"));
+      } else {
+        res.sendFile(path.join(__dirname, "failure.html"));
       }
-
     });
   });
 
@@ -67,10 +77,9 @@ app.post("/", (req, res) => {
   console.log("New Signup:");
   console.log(`Name: ${firstName} ${lastName}`);
   console.log(`Email: ${email}`);
-
 });
 
-app.post("/failure.html", (req, res)=> {
+app.post("/failure.html", (req, res) => {
   res.redirect("/");
 });
 
